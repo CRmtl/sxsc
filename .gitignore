@@ -1,0 +1,46 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# 本地 npm 缓存（沙箱/离线安装时使用）
+.npm-cache/
+
+# 环境预置的便携 Node 发行版误落在项目目录里（约 100MB）。
+# 不属于交付物，绝不能提交或部署到 Vercel。
+/nodejs/
+
+# 校历导入：模板（college-calendars.example.json）入库，
+# 你的实际数据与生成产物不入库 —— 避免把示例/草稿日期当成真实校历带进仓库。
+# 需要时跑 npm run calendar:sql 重新生成。
+/data/college-calendars.json
+/data/college-holidays.csv
+/supabase/college-holidays-import.sql

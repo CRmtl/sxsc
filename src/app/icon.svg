@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  站点图标。放在 app/ 目录下，Next.js App Router 会自动为它生成
+  <link rel="icon" href="/icon.svg">，从而消掉浏览器控制台里的 favicon 404。
+  用静态 SVG 而不是 next/og 的 ImageResponse：
+  零依赖、零运行时渲染成本，也不会引入新的失败点。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+  <text x="32" y="43"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="30" font-weight="700" letter-spacing="-1"
+        fill="#ffffff" text-anchor="middle">zx</text>
+</svg>

@@ -1,0 +1,51 @@
+{
+  "$comment": [
+    "大学校历导入模板。复制本文件为 data/college-calendars.json，填入真实数据后执行：",
+    "    npm run calendar:sql",
+    "会生成 supabase/college-holidays-import.sql（可直接粘进 Supabase SQL Editor，幂等）",
+    "以及 data/college-holidays.csv（供 Supabase 表导入用）。",
+    "",
+    "字段说明：",
+    "  university_name  大学全名，必填",
+    "  province / city  必填，必须是 china-area-data 里的规范名称（如「四川省」「成都市」）",
+    "  lat / lng        必填，必须落在中国境内（3≤lat≤54，73≤lng≤136）",
+    "  academic_year    必填，格式 YYYY-YYYY，例如 2025-2026",
+    "  winter_start / winter_end  寒假起止，要么都填要么都留空",
+    "  summer_start / summer_end  暑假起止，同上；两个假期至少要有一个完整",
+    "  source_url       校历页 URL，强烈建议填（这是数据可信度的来源）",
+    "  note             备注，可空",
+    "",
+    "⚠️ 下面这两条是**格式示例，日期是编的，不是任何学校的真实校历**。",
+    "   请用真实抓取到的日期覆盖它们，否则会污染数据集。"
+  ],
+  "calendars": [
+    {
+      "university_name": "示例大学（请替换）",
+      "province": "四川省",
+      "city": "成都市",
+      "lat": 30.95,
+      "lng": 103.97,
+      "academic_year": "2025-2026",
+      "winter_start": "2026-01-19",
+      "winter_end": "2026-02-27",
+      "summer_start": "2026-07-13",
+      "summer_end": "2026-08-30",
+      "source_url": "https://example.edu.cn/calendar-page",
+      "note": "格式示例：寒假 40 天，暑假 49 天"
+    },
+    {
+      "university_name": "示例大学二号（寒暑假只抓到寒假也要能导入）",
+      "province": "北京市",
+      "city": "北京市",
+      "lat": 39.99,
+      "lng": 116.31,
+      "academic_year": "2025-2026",
+      "winter_start": "2026-01-12",
+      "winter_end": "2026-02-22",
+      "summer_start": null,
+      "summer_end": null,
+      "source_url": null,
+      "note": "暑假尚未公布，留空即可，前端会显示「未公布」"
+    }
+  ]
+}

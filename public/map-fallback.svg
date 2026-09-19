@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  底图全部失效时的兜底占位图。
+  刻意用 SVG 而不是位图：纯文本、无二进制资产、随主题缩放不失真。
+  这张图不得替代署名 —— 地图容器上的 © OpenStreetMap contributors 始终保留。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-label="地图暂不可用">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 H0 V40" fill="none" stroke="#cbd5e1" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="800" height="450" fill="#f1f5f9"/>
+  <rect width="800" height="450" fill="url(#grid)"/>
+
+  <!-- 抽象的中国轮廓示意 -->
+  <path d="M150 250 L200 180 L280 150 L380 140 L470 165 L560 150 L640 185 L660 240 L620 300 L540 345 L430 360 L330 350 L240 320 L175 290 Z"
+        fill="#e2e8f0" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/>
+
+  <g fill="#64748b" font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" text-anchor="middle">
+    <text x="400" y="72" font-size="26" font-weight="600" fill="#334155">地图瓦片暂时无法加载</text>
+    <text x="400" y="106" font-size="15">所有 OSM 镜像都请求失败，可能是网络受限或镜像临时故障</text>
+    <text x="400" y="130" font-size="15">请刷新重试，或在右上角「图层」里手动切换底图</text>
+  </g>
+
+  <g transform="translate(400 400)">
+    <rect x="-88" y="-18" width="176" height="36" rx="18" fill="#334155"/>
+    <text fill="#f8fafc" font-family="system-ui, 'PingFang SC', sans-serif" font-size="14"
+          text-anchor="middle" y="5">底图数据 © OpenStreetMap contributors</text>
+  </g>
+</svg>
