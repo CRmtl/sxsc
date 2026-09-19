@@ -33,8 +33,22 @@ export function SiteHeader({ siteName, dataMode }: SiteHeaderProps) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 sm:px-4">
         {/* 站点名 */}
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight">
-          <span className="grid size-7 place-items-center rounded-md bg-primary text-[13px] text-primary-foreground">
-            zx
+          {/*
+            Logo：「sxsc」四个字母按阅读顺序排成 2×2 网格 ——
+            s x
+            s c
+            用 CSS Grid 的两列布局实现，比塞一个字符串更能精确控制字距与居中。
+            它是装饰性的（旁边就有文字站点名），因此 aria-hidden，
+            避免读屏把四个字母逐个念出来。
+          */}
+          <span
+            aria-hidden
+            className="grid size-9 shrink-0 grid-cols-2 place-items-center rounded-md bg-primary leading-none text-primary-foreground"
+          >
+            <span className="text-[11px] font-bold">s</span>
+            <span className="text-[11px] font-bold">x</span>
+            <span className="text-[11px] font-bold">s</span>
+            <span className="text-[11px] font-bold">c</span>
           </span>
           <span className="text-base">{siteName}</span>
         </Link>

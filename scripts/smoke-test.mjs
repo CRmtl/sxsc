@@ -15,7 +15,7 @@
  * 关键技巧：每个用例用不同的 `x-forwarded-for`，从而让 IP 限流彼此隔离，
  * 否则前面的用例会把配额吃光，导致后面的用例假失败。
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -113,6 +113,40 @@ function validSchool(overrides = {}) {
 }
 
 /* ================================================================== */
+
+/*
+ * 🛑 安全检查：冒烟测试会**真的写数据**，不允许在真实库上跑。
+ *
+ * 这是补一个真实事故的教训：这套测试会新增学校、改版本、回滚、提交校历。
+ * 有一次 dev server 因为 .env.local 被改动而**热切换**到了 Supabase 模式
+ * （Next dev 会监听 .env.local，不需要重启就会生效），
+ * 结果测试数据被写进了生产库，而 anon 角色无权 DELETE，只能靠 SQL 手工清。
+ *
+ * 所以这里在写下第一个字节之前先验明模式，不是演示模式就直接退出。
+ */
+{
+  let mode = null
+  try {
+    const res = await fetch(`${BASE}/api/meta`)
+    if (res.ok) mode = (await res.json())?.data?.dataMode ?? null
+  } catch {
+    /* 服务没起来，后面的预热会报出更清楚的错 */
+  }
+
+  if (mode && mode !== 'mock' && process.env.SMOKE_ALLOW_WRITES !== '1') {
+    console.error(`\n🛑 已中止：当前 dataMode = ${mode}，不是演示模式（mock）。\n`)
+    console.error('   scripts/smoke-test.mjs 会真的新增/修改数据：')
+    console.error('   新增学校、修改并回滚版本、提交大学校历……')
+    console.error('   在连着真实数据库时运行，会把测试垃圾写进生产数据，')
+    console.error('   而 anon 角色没有 DELETE 权限，只能再用 SQL 手工清理。\n')
+    console.error('   怎么办：')
+    console.error('   · 让服务跑演示模式：.env.local 里不要有 SUPABASE_URL / SUPABASE_ANON_KEY')
+    console.error('     ⚠️ Next dev 会热监听 .env.local，改这个文件会立刻切换模式，不必重启。')
+    console.error('   · 或指向一个可随便写的测试库，并显式确认后运行：')
+    console.error('       SMOKE_ALLOW_WRITES=1 npm run smoke\n')
+    process.exit(2)
+  }
+}
 
 /**
  * 预热。
@@ -386,6 +420,126 @@ console.log(`\n=== 1b. HTML 中的 id 唯一性（刚批量补过 id，必须防
       `${path} 没有重复 id`,
       dupes.length ? `重复：${dupes.map(([id, n]) => `${id}×${n}`).join(', ')}` : `共 ${ids.length} 个 id`,
     )
+  }
+}
+
+console.log(`\n=== 1c. Logo / 站点名 / 大学自动定位接口 ===`)
+{
+  const home = await get('/')
+
+  // Logo 里的四个字母按 2×2 网格排列（s x / s c）
+  const letters = ['>s<', '>x<', '>c<']
+  check(letters.every((l) => home.text.includes(l)), 'Logo 内含 s / x / c 字母')
+  check(home.text.includes('grid-cols-2'), 'Logo 用两列网格排版')
+  check(!home.text.includes('>zx<'), 'Logo 里不再有旧的 "zx"')
+
+  // 站点名已改为中文
+  check(home.text.includes('上学时长'), '站点名显示为「上学时长」')
+  check(
+    home.text.includes('<title>中学生上学时长与大学放假查询地图</title>'),
+    '首页 title 不重复品牌词',
+  )
+
+  // 自动定位接口：有 Key 时走真实高德，无 Key 时必须返回可操作提示而不是 500
+  const geo = await get('/api/geocode/university?name=%E8%A5%BF%E5%8D%8E%E5%A4%A7%E5%AD%A6')
+  check(geo.status !== 500, '自动定位接口不会 500', `status=${geo.status}`)
+  if (geo.status === 503) {
+    const j = JSON.parse(geo.text)
+    check(j?.code === 'amap_key_missing', '未配置 AMAP_WEB_KEY 时返回明确错误码', String(j?.code))
+    check(
+      /AMAP_WEB_KEY/.test(j?.error ?? ''),
+      '错误信息告诉用户该配哪个环境变量',
+      (j?.error ?? '').slice(0, 40) + '…',
+    )
+  } else {
+    check(geo.status === 200, '已配置 AMAP_WEB_KEY，接口返回 200', `status=${geo.status}`)
+    const j = JSON.parse(geo.text)
+    check(typeof j?.data?.message === 'string', '返回了给用户看的中文提示')
+    if (j?.data?.result) {
+      const r = j.data.result
+      check(
+        Number.isFinite(r.lat) && Number.isFinite(r.lng),
+        '返回了可用经纬度',
+        `${r.lat?.toFixed?.(4)}, ${r.lng?.toFixed?.(4)}`,
+      )
+      check(
+        r.lat > 3 && r.lat < 54 && r.lng > 73 && r.lng < 136,
+        '坐标落在中国境内（说明 GCJ→WGS 转换后仍然合理）',
+      )
+    }
+  }
+}
+
+console.log(`\n=== 1d. 高德 Key 的读取方式与环境体检 ===`)
+{
+  /*
+   * 用户报告过「我明明配了 AMAP_WEB_KEY，页面却说未配置」。
+   * 最常见的两种误配是：多写了 NEXT_PUBLIC_ 前缀、或写进了别的文件。
+   * 这里做两条静态断言，把「正确读法」钉死，防止有人为了让它「看起来能跑」
+   * 而改成 NEXT_PUBLIC_ —— 那会把 Key 暴露到浏览器，被人盗刷配额。
+   */
+  const geoRouteSrc = readFileSync(
+    resolve(root, 'src/app/api/geocode/university/route.ts'),
+    'utf8',
+  )
+  check(
+    geoRouteSrc.includes('process.env.AMAP_WEB_KEY'),
+    '路由内读取的是 process.env.AMAP_WEB_KEY',
+  )
+  check(
+    !/NEXT_PUBLIC_AMAP/i.test(geoRouteSrc),
+    '没有把 Key 写成 NEXT_PUBLIC_ 前缀（那会泄漏到浏览器）',
+  )
+
+  // 全项目都不该出现 NEXT_PUBLIC_AMAP（.env.example 里也只有说明文字）
+  const allSrc = []
+  const collect = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = resolve(dir, name)
+      if (statSync(full).isDirectory()) collect(full)
+      else if (/\.(ts|tsx)$/.test(name)) allSrc.push(readFileSync(full, 'utf8'))
+    }
+  }
+  collect(resolve(root, 'src'))
+  check(
+    !allSrc.some((s) => /NEXT_PUBLIC_AMAP/i.test(s)),
+    'src 全目录没有 NEXT_PUBLIC_AMAP',
+  )
+
+  const health = await get('/api/health/env')
+  check(health.status === 200, 'GET /api/health/env 可用', `status=${health.status}`)
+  const hj = JSON.parse(health.text)
+  check(hj?.data?.amap?.expected === 'AMAP_WEB_KEY', '体检接口报告的期望变量名正确')
+  check(
+    Array.isArray(hj?.data?.amap?.hints) && hj.data.amap.hints.length > 0,
+    '体检接口给出了下一步建议',
+  )
+  check(
+    typeof hj?.data?.amap?.configured === 'boolean',
+    '体检接口报告了 Key 是否可见',
+    `configured=${hj?.data?.amap?.configured}`,
+  )
+  // 只报名字，绝不报值
+  check(
+    !/"(key|value|secret)"\s*:/i.test(health.text),
+    '体检接口不返回任何变量值',
+  )
+
+  // 缺 Key 时的错误信息里要带上体检结论，用户不用再猜
+  if (hj?.data?.amap?.configured === false) {
+    const geo = await get('/api/geocode/university?name=%E6%B5%8B%E8%AF%95%E5%A4%A7%E5%AD%A6')
+    const gj = JSON.parse(geo.text)
+    check(
+      /未配置 AMAP_WEB_KEY/.test(gj?.error ?? ''),
+      '缺 Key 时提示里包含变量名',
+    )
+    check(
+      /服务端|形似|重新部署|重启/.test(gj?.error ?? ''),
+      '缺 Key 时提示里附带体检结论（而不是只说「未配置」）',
+      (gj?.error ?? '').slice(-60),
+    )
+  } else {
+    console.log('  note  已配置 AMAP_WEB_KEY，跳过「缺 Key 提示」相关断言')
   }
 }
 

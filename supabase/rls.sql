@@ -242,10 +242,46 @@ create policy submit_rate_limit_service_only
 revoke all on public.submit_rate_limit from anon, authenticated;
 
 -- ============================================================================
+-- 显式表级授权（不要依赖 Supabase 的隐式默认权限）
+--
+-- 这一段是补上的，因为线上实测踩到了：新式项目里通过 SQL Editor 建表时，
+-- anon 并不一定拿到预期的表级权限，表现为 REST 接口返回
+--   401 {"code":"42501","hint":"Grant the required privileges to the current role"}
+-- 注意区分：42501 是**表级权限**缺失；RLS 拒绝是 200 + 空数组。
+-- 缺读权限会让「学校详情页 / 校历详情页」直接 500，因为那两个页面要读版本历史。
+--
+-- 所以这里把权限写死：读 / 写明确给，删除明确收回。
+-- ============================================================================
+
+-- 读：公开数据，任何人可读
+grant select on table public.schools           to anon, authenticated;
+grant select on table public.college_holidays  to anon, authenticated;
+grant select on table public.holidays          to anon, authenticated;
+-- 快照表也要能被读到，否则详情页的「版本历史」区块会 500
+grant select on table public.school_revisions          to anon, authenticated;
+grant select on table public.college_holiday_revisions to anon, authenticated;
+
+-- 写：允许新增/修改（含写入快照），符合「匿名提交后直接生效」
+grant insert, update on table public.schools          to anon, authenticated;
+grant insert, update on table public.college_holidays to anon, authenticated;
+grant insert         on table public.school_revisions          to anon, authenticated;
+grant insert         on table public.college_holiday_revisions to anon, authenticated;
+
+-- 快照只增不改不删
+revoke update, delete on table public.school_revisions          from anon, authenticated;
+revoke update, delete on table public.college_holiday_revisions from anon, authenticated;
+
+-- 主体数据禁止删除
+revoke delete on table public.schools          from anon, authenticated;
+revoke delete on table public.college_holidays from anon, authenticated;
+
+-- ============================================================================
 -- 自检：确认匿名角色确实无法 DELETE
--- 在 SQL Editor 里执行下面两句应分别报错 / 影响 0 行：
+-- 在 SQL Editor 里执行下面几句应分别得到预期结果：
 --
 --   set role anon;
---   delete from public.schools where true;   -- 期望：permission denied 或 0 行
+--   select count(*) from public.school_revisions;          -- 期望：成功（可能是 0）
+--   select count(*) from public.submit_rate_limit;          -- 期望：permission denied
+--   delete from public.schools where true;                  -- 期望：permission denied 或 0 行
 --   reset role;
 -- ============================================================================

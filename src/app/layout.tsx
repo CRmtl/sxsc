@@ -5,11 +5,15 @@ import { AppToaster } from '@/components/app-toaster'
 import { SiteHeader } from '@/components/site-header'
 import { getDataMode } from '@/lib/data-source'
 
-const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME?.trim() || 'zxssxsc'
+// 站点展示名。项目代号仍是 zxssxsc（package.json / 仓库名），
+// 但顶栏展示给用户的是「上学时长」，可用 NEXT_PUBLIC_SITE_NAME 覆盖。
+const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME?.trim() || '上学时长'
 
 export const metadata: Metadata = {
   title: {
-    default: `${SITE_NAME} · 中学生上学时长地图`,
+    // 首页标题不重复品牌词：写成「上学时长 · 中学生上学时长地图」会读起来重复，
+    // 子页面再通过 template 补上品牌后缀。
+    default: '中学生上学时长与大学放假查询地图',
     template: `%s · ${SITE_NAME}`,
   },
   description:

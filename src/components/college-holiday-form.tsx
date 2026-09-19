@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, Loader2, PlusCircle } from 'lucide-react'
 
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { citiesOf, PROVINCE_NAMES } from '@/lib/china-area'
+import { cn } from '@/lib/utils'
 import { LIMITS, daysInclusive } from '@/lib/validation'
 
 const LocationPicker = dynamic(() => import('@/components/map/location-picker'), {
@@ -97,6 +98,125 @@ export function CollegeHolidayForm({ antiAbuse, dataMode }: CollegeFormProps) {
     setLng(b.toFixed(6))
     setError(null)
   }, [])
+
+  /* ------------------------------------------------------------------ */
+  /* 输入大学全名 → 自动获取省/市/经纬度并在地图上定位                    */
+  /* ------------------------------------------------------------------ */
+
+  const [lookupState, setLookupState] = useState<'idle' | 'loading' | 'ok' | 'partial' | 'error'>(
+    'idle',
+  )
+  const [lookupMsg, setLookupMsg] = useState('')
+  const lookupTimer = useRef<number | null>(null)
+  /** 上一次成功查询过的名字：避免 Enter 之后紧接着 blur 触发第二次请求 */
+  const lastLookedUp = useRef('')
+
+  const runLookup = useCallback(async (name: string) => {
+    const q = name.trim()
+    if (q.length < 2) return
+    if (lastLookedUp.current === q) return
+
+    setLookupState('loading')
+    setLookupMsg('正在查询学校位置…')
+
+    try {
+      const res = await fetch(`/api/geocode/university?name=${encodeURIComponent(q)}`, {
+        cache: 'no-store',
+      })
+      const json = (await res.json()) as
+        | {
+            ok: true
+            data: {
+              result: {
+                province: string
+                city: string
+                subCity?: string
+                provinceMatched: boolean
+                cityMatched: boolean
+                amapProvince: string
+                amapCity: string
+                amapDistrict: string
+                lat: number
+                lng: number
+                address: string
+                matchedName: string
+              } | null
+              message: string
+            }
+          }
+        | { ok: false; error: string }
+
+      if (!json.ok) {
+        // 失败不标记为「已查询」，这样用户再失焦一次就能重试
+        setLookupState('error')
+        setLookupMsg(json.error)
+        return
+      }
+
+      const result = json.data.result
+      if (!result) {
+        setLookupState('error')
+        setLookupMsg(json.data.message)
+        return
+      }
+
+      lastLookedUp.current = q
+
+      // 经纬度总是填 —— 即使省市没对上，坐标本身也是有用的
+      setLat(result.lat.toFixed(6))
+      setLng(result.lng.toFixed(6))
+      // 让地图平滑飞过去并打点（LocationPicker 收到新的 focus 就会 flyTo）
+      setFocus({ lat: result.lat, lng: result.lng, key: Date.now() })
+
+      if (result.provinceMatched) {
+        setProvince(result.province)
+        // 市没匹配上时必须清空，否则会留下一个不属于新省份的旧值，
+        // 下拉框里会出现一个不存在的选中项
+        setCity(result.cityMatched ? result.city : '')
+      }
+
+      const partial = !result.provinceMatched || !result.cityMatched
+      if (!partial) {
+        const sub = result.subCity ? `（${result.subCity} 在本级数据中归属「${result.city}」）` : ''
+        setLookupState('ok')
+        setLookupMsg(`已自动定位：${result.province} ${result.city}${sub} · ${result.address}`)
+      } else {
+        setLookupState('partial')
+        setLookupMsg(
+          result.provinceMatched
+            ? `经纬度已填入，但城市未能自动匹配（高德返回：${result.amapCity || '空'}）。请在下方手动选择城市。`
+            : `经纬度已填入，但省/市都未能自动匹配（高德返回：${result.amapProvince}${result.amapCity}）。请手动选择。`,
+        )
+      }
+    } catch {
+      setLookupState('error')
+      setLookupMsg('自动定位请求失败，请手动选择省市并在地图上选点。')
+    }
+  }, [])
+
+  /**
+   * 500ms 防抖后查询。
+   * 触发点是 blur 与 Enter，所以正常打字不会发请求；
+   * 防抖在这里真正的作用是合并「按下 Enter 后紧接着 blur」这类连续事件。
+   */
+  const scheduleLookup = useCallback(
+    (name: string) => {
+      if (lookupTimer.current !== null) window.clearTimeout(lookupTimer.current)
+      lookupTimer.current = window.setTimeout(() => {
+        lookupTimer.current = null
+        void runLookup(name)
+      }, 500)
+    },
+    [runLookup],
+  )
+
+  // 卸载时清掉待触发的定时器，避免在已卸载组件上 setState
+  useEffect(
+    () => () => {
+      if (lookupTimer.current !== null) window.clearTimeout(lookupTimer.current)
+    },
+    [],
+  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -193,15 +313,52 @@ export function CollegeHolidayForm({ antiAbuse, dataMode }: CollegeFormProps) {
             </Label>
             <Input
               id="university_name"
+              name="university_name"
               required
               maxLength={LIMITS.universityNameMax}
               value={universityName}
               onChange={(e) => setUniversityName(e.target.value)}
+              // 失焦后自动定位
+              onBlur={(e) => scheduleLookup(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  // 回车在这里的语义是「触发自动定位」，
+                  // 必须阻止它冒泡成「提交整个表单」——否则用户刚输完校名就把空表单提交了
+                  e.preventDefault()
+                  scheduleLookup(e.currentTarget.value)
+                }
+              }}
               placeholder="例如：西华大学"
+              aria-describedby="university-name-hint"
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p id="university-name-hint" className="mt-1 text-[11px] text-muted-foreground">
+              输入完整校名后<strong className="font-medium">按回车</strong>或点开别处，
+              会自动获取省份、城市与经纬度并把地图移过去。
               同一所学校同一学年只会保留一行，重复提交会覆盖并留下版本快照。
             </p>
+
+            {lookupState !== 'idle' ? (
+              <p
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'mt-2 flex items-start gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed',
+                  lookupState === 'loading' && 'border-border bg-muted/40 text-muted-foreground',
+                  lookupState === 'ok' && 'border-green-600/40 bg-green-50 text-green-800',
+                  lookupState === 'partial' && 'border-amber-500/50 bg-amber-50 text-amber-800',
+                  lookupState === 'error' && 'border-destructive/40 bg-destructive/5 text-destructive',
+                )}
+              >
+                {lookupState === 'loading' ? (
+                  <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" />
+                ) : lookupState === 'ok' ? (
+                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                )}
+                <span>{lookupMsg}</span>
+              </p>
+            ) : null}
           </div>
 
           <div>

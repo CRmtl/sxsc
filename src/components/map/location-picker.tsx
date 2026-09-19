@@ -37,7 +37,9 @@ function FlyTo({ target }: { target: { lat: number; lng: number; key: number } |
   const map = useMap()
   useEffect(() => {
     if (!target) return
-    map.setView([target.lat, target.lng], Math.max(map.getZoom(), 13), { animate: true })
+    // 用 flyTo 而不是 setView：自动定位时从全国视野平滑飞到校区，
+    // 用户能看清「飞到了哪里」，而不是画面瞬间跳过去。
+    map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 13), { duration: 1.1 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.key])
   return null
