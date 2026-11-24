@@ -1,0 +1,46 @@
+{
+    "calendars": [
+        {
+            "university_name": "北京大学",
+            "province": "北京市",
+            "city": "北京市",
+            "lat": 39.992,
+            "lng": 116.306,
+            "academic_year": "2026-2027",
+            "winter_start": "2027-01-11",
+            "winter_end": "2027-02-21",
+            "summer_start": null,
+            "summer_end": null,
+            "source_url": "https://www.pku.edu.cn/detail/3377.html",
+            "note": "校本部及医学部。深圳研究生院寒假自 1 月 18 日起。校本部及医学部暑假 6 月 28 日起，结束日期未列。"
+        },
+        {
+            "university_name": "哈尔滨工业大学",
+            "province": "黑龙江省",
+            "city": "哈尔滨市",
+            "lat": 45.74,
+            "lng": 126.63,
+            "academic_year": "2026-2027",
+            "winter_start": "2027-01-11",
+            "winter_end": "2027-02-21",
+            "summer_start": null,
+            "summer_end": null,
+            "source_url": "https://www.hit.edu.cn/2026/0423/c11600a241962/page.htm",
+            "note": "哈尔滨校本部。校历标注寒假六周。"
+        },
+        {
+            "university_name": "厦门大学",
+            "province": "福建省",
+            "city": "厦门市",
+            "lat": 24.44,
+            "lng": 118.1,
+            "academic_year": "2026-2027",
+            "winter_start": "2027-01-10",
+            "winter_end": "2027-02-13",
+            "summer_start": "2027-07-04",
+            "summer_end": "2027-09-04",
+            "source_url": "https://law.xmu.edu.cn/virtual_attach_file.vsb?afc=8olMiVM4r7Ulr7MD4MVL4M7L8Q7MmGssM8C8Lmfko7C4MmU0gihFp2hmCIa0U1yDU1h2LYyaMNCPUmW2LRrfLlMfM4NDLNQfMm-4L8LYL4VFoRrRM7UbL4fFLl-4MmlJv2nto4OeoDQZ_2C0qIbtpYyPLRLbg4LaLR-bLSbw62Z8c&e=.pdf&nid=300291&oid=1474610936&tid=1039",
+            "note": "寒假五周，暑假九周。"
+        }
+    ]
+}

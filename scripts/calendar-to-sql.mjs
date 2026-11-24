@@ -69,27 +69,19 @@ function buildSql(rows) {
   const values = rows
     .map((r) => {
       const v = r.value
-      return `  (${[
-        sqlStr(v.university_name),
-        sqlStr(v.province),
-        sqlStr(v.city),
-        v.lat,
-        v.lng,
-        sqlStr(v.academic_year),
-        sqlDate(v.winter_start),
-        sqlDate(v.winter_end),
-        sqlDate(v.summer_start),
-        sqlDate(v.summer_end),
-        sqlStr(v.source_url),
-        sqlStr(v.note),
-      ].join(', ')})`
+      const values = COLUMNS.map((column) => {
+        if (column === 'lat' || column === 'lng') return v[column]
+        if (column.endsWith('_start') || column.endsWith('_end')) return sqlDate(v[column])
+        return sqlStr(v[column])
+      })
+      return `  (${values.join(', ')})`
     })
     .join(',\n')
 
   const header = `-- 由 scripts/calendar-to-sql.mjs 自动生成，请勿手改。
 -- 共 ${rows.length} 条校历记录。
 -- 依赖 college_holidays 上的唯一约束 (university_name, academic_year)，
--- 因此重复执行本文件是**幂等**的：已存在的学校会被更新而不是插入第二行。
+-- 重复执行时，已有记录会更新而不是插入第二行；缺失的假期日期不会覆盖旧值。
 --
 -- 天数速览：
 ${rows
@@ -102,10 +94,8 @@ ${rows
   })
   .join('\n')}
 
-insert into public.college_holidays (
-  university_name, province, city, lat, lng, academic_year,
-  winter_start, winter_end, summer_start, summer_end,
-  source_url, note, version, created_at, updated_at
+insert into public.college_holidays as current_calendar (
+  ${COLUMNS.join(', ')}
 ) values
 ${values}
 on conflict (university_name, academic_year) do update set
@@ -113,13 +103,13 @@ on conflict (university_name, academic_year) do update set
   city         = excluded.city,
   lat          = excluded.lat,
   lng          = excluded.lng,
-  winter_start = excluded.winter_start,
-  winter_end   = excluded.winter_end,
-  summer_start = excluded.summer_start,
-  summer_end   = excluded.summer_end,
+  winter_start = coalesce(excluded.winter_start, current_calendar.winter_start),
+  winter_end   = coalesce(excluded.winter_end, current_calendar.winter_end),
+  summer_start = coalesce(excluded.summer_start, current_calendar.summer_start),
+  summer_end   = coalesce(excluded.summer_end, current_calendar.summer_end),
   source_url   = excluded.source_url,
   note         = excluded.note,
-  version      = public.college_holidays.version + 1,
+  version      = current_calendar.version + 1,
   updated_at   = now();
 
 -- 核对：
@@ -252,6 +242,22 @@ function selfCheck() {
   const dup = prepare({ calendars: [good, { ...good }] })
   ok(dup.errors.some((e) => e.includes('重复')), '同一份输入里的重复条目被拦下')
 
+  console.log('\n=== SQL 导入回归 ===')
+  const partial = prepare({ calendars: [
+    { ...good, university_name: '寒假校历', summer_start: null, summer_end: null },
+    { ...good, university_name: '暑假校历', winter_start: null, winter_end: null },
+  ] })
+  ok(partial.errors.length === 0 && partial.rows.length === 2, '只提供一个完整假期的记录仍可导入')
+  const sql = buildSql(partial.rows)
+  const insert = sql.match(/insert into public\.college_holidays as current_calendar \(\s*([^)]*)\) values\n([\s\S]*?)\non conflict/)
+  const targetColumns = insert?.[1].split(',').map((c) => c.trim()) ?? []
+  const tuples = insert ? [...insert[2].matchAll(/\(([^()]*)\)/g)] : []
+  ok(!['version', 'created_at', 'updated_at'].some((c) => targetColumns.includes(c)), '新增记录使用数据库默认版本号和时间戳')
+  ok(tuples.length === 2 && tuples.every((tuple) => tuple[1].split(',').length === targetColumns.length), 'INSERT 的列数与每行值的数量一致')
+  for (const column of ['winter_start', 'winter_end', 'summer_start', 'summer_end']) {
+    ok(sql.includes(`coalesce(excluded.${column}, current_calendar.${column})`), `${column} 未提供时保留库中日期`)
+  }
+
   console.log(failed === 0 ? '\n✅ 自检全部通过' : `\n❌ 自检失败 ${failed} 项`)
   return failed === 0
 }
@@ -327,5 +333,5 @@ writeFileSync(outCsvPath, buildCsv(rows), 'utf8')
 console.log(`✅ 已生成 ${rows.length} 条校历记录（UTF-8 与列数已回读校验）`)
 console.log(`   SQL: ${outSqlPath.replace(root + '\\', '').replace(root + '/', '')}`)
 console.log(`   CSV: ${outCsvPath.replace(root + '\\', '').replace(root + '/', '')}`)
-console.log('\n   下一步：把 SQL 内容粘进 Supabase SQL Editor 执行（可重复执行，幂等）。')
+console.log('\n   下一步：把 SQL 内容粘进 Supabase SQL Editor 执行（可重复执行，不会产生重复行）。')
 console.log(`   输入文件：${basename(inputPath)}`)

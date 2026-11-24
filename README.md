@@ -479,12 +479,22 @@ interface CollegeHoliday {
    npm run calendar:sql
    ```
 
-   产出 `supabase/college-holidays-import.sql`（**幂等**，可反复执行）
+   产出 `supabase/college-holidays-import.sql`（可重复执行，不会产生重复行）
    与 `data/college-holidays.csv`（供 Supabase 表导入用）。
 5. 把 SQL 内容粘进 Supabase SQL Editor 执行
 
-`npm run calendar:check` 是这套转换的自检（19 项），覆盖 SQL 单引号转义、
-CSV 引号规则、以及**直接复用应用自己的 `validateCollegeHoliday`** 跑的各类拒绝路径。
+已核验的 [2026–2027 学年首批校历](data/college-calendars/2026-2027.json) 包含北京大学（校本部及医学部）、
+哈尔滨工业大学（哈尔滨校本部）和厦门大学。每条记录都附有学校公布的校历；坐标沿用项目地图的近似校址。
+如需在本地检查此批数据或生成导入文件，可运行：
+
+```bash
+npm run calendar:sql -- data/college-calendars/2026-2027.json
+```
+
+生成文件不会连接数据库。实际导入前先核对目标库和已有记录；某一季起止均为空时，SQL 会保留库中该季的已有日期。
+
+`npm run calendar:check` 是这套转换的自检，覆盖 SQL 单引号转义、导入列和值的对齐、
+缺失日期的保留、CSV 引号规则，以及**直接复用应用自己的 `validateCollegeHoliday`** 跑的各类拒绝路径。
 校验规则只有一份，不会出现「前端能过、导入脚本也能过、但两者口径已经分叉」。
 
 ### ⚠️ 当前抓取的实测状态（重要）
